@@ -1,0 +1,24 @@
+# General data parameters
+data_params:
+  ticker: "AAPL"
+  start_date: "2015-01-01"
+  end_date: "2023-12-31"
+
+# Preprocessing options
+preprocessing:
+  fillna_method: "ffill"
+
+# Feature engineering
+features:
+  use_technical_indicators: true
+  lag_days: [1, 2, 3, 5, 10]
+
+# Modeling
+model_params:
+  model_type: "xgboost"
+  test_size: 0.2
+  random_state: 42
+  xgboost:
+    max_depth: 5
+    n_estimators: 100
+    learning_rate: 0.1
