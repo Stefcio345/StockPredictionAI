@@ -1,34 +1,33 @@
 # Raw data from Yahoo Finance
-stock_raw_data:
+stocks_history_raw_data:
   type: pandas.CSVDataset
-  filepath: data/01_raw/stock_raw_data.csv
+  filepath: data/01_raw/stocks_history_raw_data.csv
 
-# Cleaned data
-stock_cleaned_data:
-  type: pandas.ParquetDataset
-  filepath: data/02_intermediate/stock_cleaned_data.parquet
+stocks_information_raw_data:
+  type: pandas.CSVDataset
+  filepath: data/01_raw/stocks_information_raw_data.csv
 
 # Feature-engineered data
-stock_features:
-  type: pandas.ParquetDataset
-  filepath: data/04_feature/stock_features.parquet
+# stock_features:
+#   type: pandas.ParquetDataset
+#   filepath: data/04_feature/stock_features.parquet
 
-# Model input (train/test split)
-model_input:
-  type: pandas.ParquetDataset
-  filepath: data/05_model_input/model_input.parquet
+# # Model input (train/test split)
+# model_input:
+#   type: pandas.ParquetDataset
+#   filepath: data/05_model_input/model_input.parquet
 
-# Trained model
-trained_model:
-  type: pickle.PickleDataset
-  filepath: data/06_models/trained_model.pkl
+# # Trained model
+# trained_model:
+#   type: pickle.PickleDataset
+#   filepath: data/06_models/trained_model.pkl
 
-# Model evaluation metrics
-model_metrics:
-  type: tracking.MetricsDataset
-  filepath: data/07_model_output/metrics.json
+# # Model evaluation metrics
+# model_metrics:
+#   type: tracking.MetricsDataset
+#   filepath: data/07_model_output/metrics.json
 
-# Model predictions
-model_predictions:
-  type: pandas.CSVDataset
-  filepath: data/07_model_output/predictions.csv
+# # Model predictions
+# model_predictions:
+#   type: pandas.CSVDataset
+#   filepath: data/07_model_output/predictions.csv

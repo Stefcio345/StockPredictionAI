@@ -1,18 +1,18 @@
 from kedro.pipeline import Pipeline, node, pipeline
-from .nodes import download_stock_data, clean_stock_data
+from .nodes import download_stocks_history, download_stocks_information
 
 def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
         node(
-            func=download_stock_data,
-            inputs=["params:data_params.ticker", "params:data_params.start_date", "params:data_params.end_date"],
-            outputs="stock_raw_data",
-            name="download_data_node"
+            func=download_stocks_information,
+            inputs=[],
+            outputs="stocks_information_raw_data",
+            name="download_stocks_info_node"
         ),
         node(
-            func=clean_stock_data,
-            inputs=["stock_raw_data", "params:preprocessing.fillna_method"],
-            outputs="stock_cleaned_data",
-            name="clean_data_node"
-        ),
+            func=download_stocks_history,
+            inputs=["stocks_information_raw_data"],
+            outputs="stocks_history_raw_data",
+            name="download_stocks_history_node"
+        )
     ])
