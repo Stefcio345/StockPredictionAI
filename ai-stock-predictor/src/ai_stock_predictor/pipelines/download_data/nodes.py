@@ -21,7 +21,6 @@ def download_stocks_history(stocksInformationDf: pd.DataFrame) -> pd.DataFrame:
     p = os.getcwd() + '/data/01_raw/stocks_history_raw_data.csv'
     if Path(p).exists():
         print('Data already downloaded')
-        print(data.head(1))
         return pd.read_csv('data/01_raw/stocks_history_raw_data.csv')
     
     print('Downloading stocks history from Yahoo')

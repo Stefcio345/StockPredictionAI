@@ -11,6 +11,20 @@ stocks_information_raw_data:
   save_args:
     index: False
 
+stocks_information_cleaned:
+  type: pandas.ParquetDataset
+  filepath: data/02_cleaned/stocks_information_cleaned.parquet
+  save_args:
+    index: False
+    compression: brotli
+
+stocks_history_cleaned:
+  type: pandas.ParquetDataset
+  filepath: data/02_cleaned/stocks_history_cleaned.parquet
+  save_args:
+    index: False
+    compression: brotli
+
 # Feature-engineered data
 # stock_features:
 #   type: pandas.ParquetDataset
