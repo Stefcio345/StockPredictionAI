@@ -10,8 +10,7 @@ def add_lag_features(df: pd.DataFrame, lag_days: list[int]) -> pd.DataFrame:
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # Make sure 'Close' is numeric
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
+    df['Typical price'] = (df['High'] + df['Low'] + df['Close']) / 3
 
     df["MA_10"] = df["Close"].rolling(window=10).mean()
     df["MA_50"] = df["Close"].rolling(window=50).mean()
