@@ -32,13 +32,15 @@ def download_stocks_history(stocksInformationDf: pd.DataFrame) -> pd.DataFrame:
         t = yf.Ticker(ticker)
         hist = t.history(start='2000-01-01', end='2025-06-07')
         
-        # extract Date column from the index
-        hist['Date'] = hist.index
-        hist = hist[['Date'] + [col for col in hist.columns if col != 'Date']]
+        if not hist.empty:
+            # extract Date column from the index
+            hist['Date'] = hist.index
+            hist = hist[['Date'] + [col for col in hist.columns if col != 'Date']]
 
-        hist['Ticker'] = ticker
+            hist['Ticker'] = ticker
 
-        data = pd.concat([data, hist], ignore_index=True)
+            data = pd.concat([data, hist], ignore_index=True)
+        
         time.sleep(1)
     
     return data
