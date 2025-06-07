@@ -25,6 +25,13 @@ stocks_history_cleaned:
     index: False
     compression: brotli
 
+stocks_data_merged:
+  type: pandas.ParquetDataset
+  filepath: data/03_merged/stocks_data_merged.parquet
+  save_args:
+    index: False
+    compression: brotli
+
 # Feature-engineered data
 # stock_features:
 #   type: pandas.ParquetDataset
