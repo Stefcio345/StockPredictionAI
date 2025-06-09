@@ -7,6 +7,12 @@ features:
   use_technical_indicators: true
   lag_days: [1, 2, 3, 5, 10]
 
+target_columns:
+  - Close
+  - Open
+  - Low
+  - High
+
 # Modeling
 model_params:
   model_type: "xgboost"

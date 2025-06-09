@@ -32,12 +32,54 @@ stocks_data_merged:
     index: False
     compression: brotli
 
+stocks_with_date:
+  type: pandas.ParquetDataset
+  filepath: data/04_feature_engineering/stocks_with_date.parquet
+  save_args:
+    index: False
+    compression: brotli
+
+stocks_with_company:
+  type: pandas.ParquetDataset
+  filepath: data/04_feature_engineering/stocks_with_company.parquet
+  save_args:
+    index: False
+    compression: brotli
+
+stocks_with_lags:
+  type: pandas.ParquetDataset
+  filepath: data/04_feature_engineering/stocks_with_lags.parquet
+  save_args:
+    index: False
+    compression: brotli
+
+stocks_with_corporate:
+  type: pandas.ParquetDataset
+  filepath: data/04_feature_engineering/stocks_with_corporate.parquet
+  save_args:
+    index: False
+    compression: brotli
+
 stocks_final:
   type: pandas.ParquetDataset
   filepath: data/04_feature_engineering/stocks_final.parquet
   save_args:
     index: False
     compression: brotli
+
+model_input_table:
+  type: pandas.ParquetDataset
+  filepath: data/04_feature_engineering/stocks_final.parquet
+  load_args:
+    engine: auto
+
+multi_target_models:
+  type: pickle.PickleDataset
+  filepath: data/05_models/multi_target_models.pkl
+
+multi_target_metrics:
+  type: yaml.YAMLDataset
+  filepath: data/06_reports/multi_target_metrics.yaml
 
 # Feature-engineered data
 # stock_features:
