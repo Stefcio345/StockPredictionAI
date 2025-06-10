@@ -73,35 +73,18 @@ model_input_table:
   load_args:
     engine: auto
 
-multi_target_models:
+train_data:
+  type: pandas.ParquetDataset
+  filepath: data/05_model_input/train_data.csv
+
+test_data:
+  type: pandas.ParquetDataset
+  filepath: data/05_model_input/test_data.csv
+
+trained_multi_target_models:
   type: pickle.PickleDataset
-  filepath: data/05_models/multi_target_models.pkl
+  filepath: data/05_models/trained_multi_target_models.pkl
 
 multi_target_metrics:
   type: yaml.YAMLDataset
   filepath: data/06_reports/multi_target_metrics.yaml
-
-# Feature-engineered data
-# stock_features:
-#   type: pandas.ParquetDataset
-#   filepath: data/04_feature/stock_features.parquet
-
-# # Model input (train/test split)
-# model_input:
-#   type: pandas.ParquetDataset
-#   filepath: data/05_model_input/model_input.parquet
-
-# # Trained model
-# trained_model:
-#   type: pickle.PickleDataset
-#   filepath: data/06_models/trained_model.pkl
-
-# # Model evaluation metrics
-# model_metrics:
-#   type: tracking.MetricsDataset
-#   filepath: data/07_model_output/metrics.json
-
-# # Model predictions
-# model_predictions:
-#   type: pandas.CSVDataset
-#   filepath: data/07_model_output/predictions.csv

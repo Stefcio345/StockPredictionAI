@@ -53,7 +53,9 @@ def evaluate_multi_target_models(predictors: dict, test_data: pd.DataFrame, targ
         y_pred = predictors[full_target].predict(X_test)
 
         # Metrics
-        metrics[f"{target}_RMSE"] = mean_squared_error(y_true, y_pred, squared=False)
+        mse = mean_squared_error(y_true, y_pred)
+        rmse = np.sqrt(mse)
+        metrics[f"{target}_RMSE"] = rmse
         metrics[f"{target}_MAE"] = mean_absolute_error(y_true, y_pred)
         metrics[f"{target}_R2"] = r2_score(y_true, y_pred)
         metrics[f"{target}_MAPE"] = np.mean(np.abs((y_true - y_pred) / y_true.replace(0, np.nan))) * 100
