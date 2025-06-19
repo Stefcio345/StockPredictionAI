@@ -12,6 +12,7 @@ target_columns:
   - Open
   - Low
   - High
+  - Volume
 
 # Modeling
 model_params:

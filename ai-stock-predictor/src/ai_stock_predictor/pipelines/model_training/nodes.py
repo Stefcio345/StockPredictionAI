@@ -11,14 +11,30 @@ def smape(y_true, y_pred):
     diff = np.abs(y_true - y_pred) / denominator
     return np.mean(diff) * 100
 
-def split_data(data: pd.DataFrame, target_columns: list, test_size: float = 0.2):
+def split_data(data: pd.DataFrame, target_columns: list):
+    # Ensure Date is datetime
+    data['Date'] = pd.to_datetime(data['Date'])
+
     # Shift targets before splitting
     for col in target_columns:
         data[f"{col}_target"] = data.groupby("Symbol")[col].shift(-1)
 
+    # Drop rows where the target couldn't be computed
     data = data.dropna(subset=[f"{col}_target" for col in target_columns])
 
-    train_data, test_data = train_test_split(data, test_size=test_size, shuffle=False)  # no shuffle for time series
+    train_parts = []
+    test_parts = []
+
+    for symbol, group in data.groupby("Symbol"):
+        group = group.sort_values("Date")
+        last_month = group["Date"].dt.to_period("M").max()
+        test_mask = group["Date"].dt.to_period("M") == last_month
+
+        test_parts.append(group[test_mask])
+        train_parts.append(group[~test_mask])
+
+    train_data = pd.concat(train_parts)
+    test_data = pd.concat(test_parts)
 
     return train_data, test_data
 
@@ -31,12 +47,22 @@ def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
         label_col = f"{target}_target"
         print(f"Training model for target: {target}")
 
+        # Define hyperparameters dict to only include the best models
+        hyperparameters = {
+            'XGB': {},  # XGBoost
+            'XT': {},  # ExtraTrees
+            'GBM': {},  # LightGBM
+        }
+
         # Drop the label columns (future targets) of *other* targets
         other_target_labels = [col for col in target_labels if (col != label_col)]
         features = train_data.drop(columns=other_target_labels)
 
         print(f"Features: {features.columns}")
-        predictors[label_col] = TabularPredictor(label=label_col).fit(features)
+        predictors[label_col] = TabularPredictor(label=label_col).fit(
+            train_data=features,
+            hyperparameters=hyperparameters
+        )
     return predictors
 
 
@@ -71,7 +97,7 @@ def evaluate_multi_target_models(predictors: dict, test_data: pd.DataFrame, targ
         true_df = pd.DataFrame(all_truths)
         plot_prediction_correlation_matrices(pred_df, true_df)
 
-    return pd.DataFrame([metrics]).T.rename(columns={0: "Value"})
+    return metrics
 
 def plot_prediction_correlation_matrices(pred_df: pd.DataFrame, true_df: pd.DataFrame):
     # Correlation between each target's prediction and ground truth

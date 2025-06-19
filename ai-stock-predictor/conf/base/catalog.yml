@@ -88,3 +88,5 @@ trained_multi_target_models:
 multi_target_metrics:
   type: yaml.YAMLDataset
   filepath: data/06_reports/multi_target_metrics.yaml
+  save_args:
+    default_flow_style: false
