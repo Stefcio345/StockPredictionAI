@@ -11,7 +11,9 @@ def smape(y_true, y_pred):
     diff = np.abs(y_true - y_pred) / denominator
     return np.mean(diff) * 100
 
-def split_data(data: pd.DataFrame, target_columns: list):
+def split_data(data: pd.DataFrame, target_columns: list, symbol: str = "AAPL"):
+    data = data[data["Symbol"] == symbol].copy()
+
     # Ensure Date is datetime
     data['Date'] = pd.to_datetime(data['Date'])
 
@@ -27,14 +29,19 @@ def split_data(data: pd.DataFrame, target_columns: list):
 
     for symbol, group in data.groupby("Symbol"):
         group = group.sort_values("Date")
-        last_month = group["Date"].dt.to_period("M").max()
-        test_mask = group["Date"].dt.to_period("M") == last_month
+        # Get the cutoff date
+        cutoff_date = group["Date"].max() - pd.Timedelta(days=36)
 
+        # Split based on cutoff
+        test_mask = group["Date"] > cutoff_date
         test_parts.append(group[test_mask])
         train_parts.append(group[~test_mask])
 
     train_data = pd.concat(train_parts)
     test_data = pd.concat(test_parts)
+
+    print("TEST DATA:")
+    print(train_data)
 
     return train_data, test_data
 
@@ -47,13 +54,6 @@ def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
         label_col = f"{target}_target"
         print(f"Training model for target: {target}")
 
-        # Define hyperparameters dict to only include the best models
-        hyperparameters = {
-            'XGB': {},  # XGBoost
-            'XT': {},  # ExtraTrees
-            'GBM': {},  # LightGBM
-        }
-
         # Drop the label columns (future targets) of *other* targets
         other_target_labels = [col for col in target_labels if (col != label_col)]
         features = train_data.drop(columns=other_target_labels)
@@ -61,7 +61,7 @@ def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
         print(f"Features: {features.columns}")
         predictors[label_col] = TabularPredictor(label=label_col).fit(
             train_data=features,
-            hyperparameters=hyperparameters
+            presets='best_quality'
         )
     return predictors
 

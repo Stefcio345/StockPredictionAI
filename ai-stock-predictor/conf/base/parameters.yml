@@ -14,6 +14,9 @@ target_columns:
   - High
   - Volume
 
+ticker:
+  "AAPL"
+
 # Modeling
 model_params:
   model_type: "xgboost"

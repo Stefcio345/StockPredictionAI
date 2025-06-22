@@ -114,7 +114,7 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # === Load trained models
-predictors = joblib.load("predictors.pkl")
+predictors = joblib.load("./ai-stock-predictor/data/05_models/trained_multi_target_models.pkl")
 
 # === Predict function
 def predict(predictors: dict, input_df: pd.DataFrame) -> dict:

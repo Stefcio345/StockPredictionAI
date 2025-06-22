@@ -5,7 +5,7 @@ def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
         node(
             func=split_data,
-            inputs=["stocks_final", "params:target_columns"],
+            inputs=["stocks_final", "params:target_columns", "params:ticker"],
             outputs=["train_data", "test_data"],
             name="split_data_node",
         ),
