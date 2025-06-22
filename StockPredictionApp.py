@@ -3,84 +3,26 @@ import pandas as pd
 import yfinance as yf
 import joblib
 import plotly.graph_objects as go
+import numpy as np
+from autogluon.multimodal import MultiModalPredictor
+
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_technical_indicators
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_lag_features
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_date_features
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_company_features
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_corporate_action_features
+
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_merge.nodes import merge_both_datasets
+
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import convert_date_columns
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import clean_founded_column
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import remove_unused_columns
+
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.model_training.nodes import split_data
+
+
+
 from datetime import timedelta
-
-def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    df['Typical price'] = (df['High'] + df['Low'] + df['Close']) / 3
-
-    # Added grouping by company
-    df["MA_10"] = df.groupby("Symbol")["Close"].transform(lambda x: x.rolling(10).mean())
-    df["MA_10"] = df.groupby("Symbol")["Close"].transform(lambda x: x.rolling(50).mean())
-    df["RSI"] = compute_rsi_grouped(df)
-
-    return df
-
-def add_lag_features(df: pd.DataFrame, lag_days: list[int]) -> pd.DataFrame:
-    df = df.copy()
-    for lag in lag_days:
-        df[f"lag_{lag}"] = df.groupby("Symbol")["Close"].shift(lag)
-
-    # Example: lag RSI and MA_10 if they exist
-    if 'RSI' in df.columns:
-        for lag in [1, 2]:
-            df[f"RSI_lag_{lag}"] = df.groupby("Symbol")["RSI"].shift(lag)
-    if 'MA_10' in df.columns:
-        for lag in [1, 2]:
-            df[f"MA_10_lag_{lag}"] = df.groupby("Symbol")["MA_10"].shift(lag)
-
-    return df
-
-def add_date_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    df['Date'] = pd.to_datetime(df['Date'])
-
-    df['day_of_week'] = df['Date'].dt.dayofweek       # 0=Monday
-    df['day_of_month'] = df['Date'].dt.day
-    df['month'] = df['Date'].dt.month
-    df['is_month_start'] = df['Date'].dt.is_month_start.astype(int)
-    df['is_month_end'] = df['Date'].dt.is_month_end.astype(int)
-
-    return df
-
-def add_company_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-
-    # Ensure datetime types
-    df['Date'] = pd.to_datetime(df['Date'])
-    df['Founded'] = pd.to_datetime(df['Founded'], errors='coerce')
-    df['Date added'] = pd.to_datetime(df['Date added'], errors='coerce')
-
-    # Company age at each row
-    df['company_age'] = df['Date'].dt.year - df['Founded'].dt.year
-
-    # Years since added to index (e.g. S&P500)
-    df['years_since_added'] = df['Date'].dt.year - df['Date added'].dt.year
-
-    # Handle cases where founding date or date added is missing
-    df['company_age'] = df['company_age'].fillna(-1)
-    df['years_since_added'] = df['years_since_added'].fillna(-1)
-
-    return df
-
-def add_corporate_action_features(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df['dividend_lag_1'] = df.groupby("Symbol")["Dividends"].shift(1)
-    df['split_lag_1'] = df.groupby("Symbol")["Stock Splits"].shift(1)
-    return df
-
-def compute_rsi_grouped(df: pd.DataFrame, window: int = 14) -> pd.Series:
-    def compute_rsi(series: pd.Series) -> pd.Series:
-        delta = series.diff()
-        gain = delta.where(delta > 0, 0).rolling(window=window).mean()
-        loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-
-    return df.groupby("Symbol")["Close"].transform(compute_rsi)
 
 @st.cache_data
 def download_stocks_information():
@@ -96,13 +38,13 @@ def download_single_stock_history(ticker: str) -> pd.DataFrame:
     hist["Ticker"] = ticker
     return hist
 
-def merge_both_datasets(info_df: pd.DataFrame, history_df: pd.DataFrame) -> pd.DataFrame:
-    merged = pd.merge(history_df, info_df, left_on="Ticker", right_on="Symbol")
-    return merged.drop(columns="Ticker")
-
-def clean_founded_column(df: pd.DataFrame):
-    df["Founded"] = df["Founded"].astype(str).str.extract(r"(\d{4})")
-    return df
+def process_after_download(info_df: pd.DataFrame, history_df: pd.DataFrame, ticker: str):
+    """Processes and merges info and history DataFrames for a given ticker."""
+    info_df, history_df = remove_unused_columns(info_df, history_df, ticker)
+    history_df = convert_date_columns(history_df)
+    info_df = clean_founded_column(info_df)
+    merged_df = merge_both_datasets(info_df, history_df)
+    return merged_df
 
 # === Full preprocessing #TODO: Copy this from kedro
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -114,14 +56,17 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # === Load trained models
-predictors = joblib.load("./ai-stock-predictor/data/05_models/trained_multi_target_models.pkl")
+predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
 
 # === Predict function
 def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
     results = {}
     for label, predictor in predictors.items():
         cleaned = input_df.drop(columns=[col for col in input_df.columns if col.endswith("_target")], errors="ignore")
-        pred = predictor.predict(cleaned)
+        path = f"/home/Franke/Projects/StockPredictionAI/ai_stock_predictor/data/05_model_input/{label.replace("_target", "")}"
+        inference = MultiModalPredictor.load(path)
+        pred = inference.predict(cleaned)
+
         results[label.replace("_target", "")] = round(pred.values[0], 2)
     return results
 
@@ -139,14 +84,10 @@ if st.button("Predict"):
         if history_df.empty or ticker_input not in info_df["Symbol"].values:
             st.error("Invalid ticker or no data available.")
         else:
-            info_df = info_df[info_df["Symbol"] == ticker_input]
-            info_df = clean_founded_column(info_df)
-            merged = merge_both_datasets(info_df, history_df)
+            merged = process_after_download(info_df, history_df, ticker_input)
             merged = preprocess(merged)
 
-            merged["Date"] = pd.to_datetime(merged["Date"]).dt.date
-
-            row = merged[merged["Date"] == date_input]
+            row = merged[merged["Date"].dt.date == date_input]
 
             if row.empty:
                 st.warning("No data available for that ticker on the selected date.")
@@ -156,6 +97,7 @@ if st.button("Predict"):
                 # Start recursive prediction
                 predictions = []
                 start_date = date_input
+                merged["Date"] = merged["Date"].dt.date
                 end_date = max(merged["Date"])
 
                 # Keep original processed data until start_date
@@ -167,16 +109,28 @@ if st.button("Predict"):
 
                     # 1. Run full preprocessing on the rolling dataset
                     processed = preprocess(history_until_now)
-                    processed["Date"] = pd.to_datetime(processed["Date"]).dt.date
 
                     # 2. Get last row for prediction
-                    current_row = processed[processed["Date"] == start_date]
+                    current_row = processed[processed["Date"].dt.normalize() == pd.to_datetime(start_date)].copy()
+
                     if current_row.empty:
                         st.warning(f"No data available to preprocess on {start_date}")
                         break
 
+                    # Code specifically to add bolerplate data to prediciton as Multimodal does not work with single row of data
+                    empty_row = current_row.iloc[0:1].copy()
+                    for col in empty_row.columns:
+                        if pd.api.types.is_integer_dtype(empty_row[col]):
+                            empty_row[col] = empty_row[col].astype("float")
+                        elif pd.api.types.is_datetime64_any_dtype(empty_row[col]):
+                            empty_row[col] = pd.NaT
+                        else:
+                            empty_row[col] = empty_row[col].astype("object")
+                    empty_row.loc[:] = np.nan
+                    batched = pd.concat([current_row, empty_row], ignore_index=True)
+
                     # 3. Predict
-                    prediction = predict(predictors, current_row)
+                    prediction = predict(predictors, batched)
 
                     # 4. Create fake future row from prediction
                     new_row = current_row.copy()

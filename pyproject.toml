@@ -1,0 +1,11 @@
+[project]
+name = "ai-stock-predictor"
+version = "0.1.0"
+description = "My AI stock predictor project using Kedro"
+authors = [{ name = "Franciszek Kępski"},{ name = "Patryk Mikuli"}]
+readme = "README.md"
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

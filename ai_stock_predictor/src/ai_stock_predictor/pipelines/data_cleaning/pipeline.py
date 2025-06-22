@@ -5,7 +5,7 @@ def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
         node(
             func=remove_unused_columns,
-            inputs=['stocks_information_raw_data', 'stocks_history_raw_data'],
+            inputs=['stocks_information_raw_data', 'stocks_history_raw_data', "params:ticker"],
             outputs=['stocks_information_removed_unused', 'stocks_history_removed_unused'],
             name='remove_unused_columns_node'
         ),

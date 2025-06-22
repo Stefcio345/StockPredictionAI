@@ -176,5 +176,5 @@ cython_debug/
 # macOS
 .DS_Store
 
-/ai-stock-predictor/data/*
-/ai-stock-predictor/AutogluonModels/*
+/ai_stock_predictor/data/*
+/ai_stock_predictor/AutogluonModels/*

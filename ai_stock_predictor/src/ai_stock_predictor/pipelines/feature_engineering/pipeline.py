@@ -5,9 +5,22 @@ from .nodes import add_lag_features, add_technical_indicators, add_date_features
 
 def create_pipeline(**kwargs) -> Pipeline:
     return pipeline([
+
+        node(
+            func=add_technical_indicators,
+            inputs="stocks_data_merged",
+            outputs="stocks_with_technical_indicators",
+            name="technical_indicators_node"
+        ),
+        node(
+            func=add_lag_features,
+            inputs=["stocks_with_technical_indicators", "params:features.lag_days"],
+            outputs="stocks_with_lags",
+            name="lag_features_node"
+        ),
         node(
             func=add_date_features,
-            inputs="stocks_data_merged",
+            inputs="stocks_with_lags",
             outputs="stocks_with_date",
             name="date_features_node"
         ),
@@ -18,21 +31,9 @@ def create_pipeline(**kwargs) -> Pipeline:
             name="company_features_node"
         ),
         node(
-            func=add_lag_features,
-            inputs=["stocks_with_company", "params:features.lag_days"],
-            outputs="stocks_with_lags",
-            name="lag_features_node"
-        ),
-        node(
             func=add_corporate_action_features,
-            inputs="stocks_with_lags",
-            outputs="stocks_with_corporate",
-            name="corporate_features_node"
-        ),
-        node(
-            func=add_technical_indicators,
-            inputs="stocks_with_corporate",
+            inputs="stocks_with_company",
             outputs="stocks_final",
-            name="technical_indicators_node"
-        ),
+            name="corporate_features_node"
+        )
     ])

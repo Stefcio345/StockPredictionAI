@@ -15,14 +15,3 @@ target_columns:
   - Volume
 
 ticker:
-  "AAPL"
-
-# Modeling
-model_params:
-  model_type: "xgboost"
-  test_size: 0.2
-  random_state: 42
-  xgboost:
-    max_depth: 5
-    n_estimators: 100
-    learning_rate: 0.1

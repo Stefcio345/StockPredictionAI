@@ -3,7 +3,7 @@ from ai_stock_predictor.pipelines.download_data import pipeline as download_data
 from ai_stock_predictor.pipelines.feature_engineering import pipeline as feature_engineering_pipeline
 from ai_stock_predictor.pipelines.data_cleaning import pipeline as data_cleaning_pipeline
 from ai_stock_predictor.pipelines.data_merge import pipeline as data_merge_pipeline
-from ai_stock_predictor.pipelines.model_training import pipeline as model_training_pipeline  # ✅ NEW
+from ai_stock_predictor.pipelines.model_training import pipeline as model_training_pipeline
 
 def register_pipelines() -> dict[str, Pipeline]:
     return {

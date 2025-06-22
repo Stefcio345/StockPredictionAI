@@ -1,4 +1,5 @@
 from autogluon.tabular import TabularPredictor
+from autogluon.multimodal import MultiModalPredictor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import pandas as pd
@@ -11,9 +12,7 @@ def smape(y_true, y_pred):
     diff = np.abs(y_true - y_pred) / denominator
     return np.mean(diff) * 100
 
-def split_data(data: pd.DataFrame, target_columns: list, symbol: str = "AAPL"):
-    data = data[data["Symbol"] == symbol].copy()
-
+def split_data(data: pd.DataFrame, target_columns: list):
     # Ensure Date is datetime
     data['Date'] = pd.to_datetime(data['Date'])
 
@@ -40,9 +39,6 @@ def split_data(data: pd.DataFrame, target_columns: list, symbol: str = "AAPL"):
     train_data = pd.concat(train_parts)
     test_data = pd.concat(test_parts)
 
-    print("TEST DATA:")
-    print(train_data)
-
     return train_data, test_data
 
 
@@ -59,10 +55,14 @@ def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
         features = train_data.drop(columns=other_target_labels)
 
         print(f"Features: {features.columns}")
-        predictors[label_col] = TabularPredictor(label=label_col).fit(
+
+        predictor = MultiModalPredictor(label=label_col)
+        predictors[label_col] = predictor.fit(
             train_data=features,
-            presets='best_quality'
+            time_limit=60
         )
+        predictor.save(f"data/05_models/{target}")
+
     return predictors
 
 

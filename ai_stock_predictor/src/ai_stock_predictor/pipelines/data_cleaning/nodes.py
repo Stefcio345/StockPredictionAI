@@ -1,13 +1,13 @@
 import pandas as pd
 from typing import Tuple
 
-def remove_unused_columns(stocksInformationDf: pd.DataFrame, stocksHistoryDf: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def remove_unused_columns(stocksInformationDf: pd.DataFrame, stocksHistoryDf: pd.DataFrame, symbol: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     stocksInformationDf = stocksInformationDf.drop(columns=['Security', 'CIK'])
 
-    # stocksHistoryDf = stocksHistoryDf.drop(columns=['Adj Close'])
-
-    # Drop headquarters location due to a high number of unique values
     stocksInformationDf = stocksInformationDf.drop(columns='Headquarters Location')
+    if(symbol is not None):
+        stocksInformationDf = stocksInformationDf[stocksInformationDf['Symbol'] == symbol]
+        stocksHistoryDf = stocksHistoryDf[stocksHistoryDf['Ticker'] == symbol]
 
     return stocksInformationDf, stocksHistoryDf
 

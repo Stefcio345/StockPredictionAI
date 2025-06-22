@@ -55,7 +55,7 @@ stocks_with_lags:
 
 stocks_with_corporate:
   type: pandas.ParquetDataset
-  filepath: data/04_feature_engineering/stocks_with_corporate.parquet
+  filepath: data/04_feature_engineering/stocks_with_technical_indicators.parquet
   save_args:
     index: False
     compression: brotli
@@ -72,14 +72,6 @@ model_input_table:
   filepath: data/04_feature_engineering/stocks_final.parquet
   load_args:
     engine: auto
-
-train_data:
-  type: pandas.ParquetDataset
-  filepath: data/05_model_input/train_data.csv
-
-test_data:
-  type: pandas.ParquetDataset
-  filepath: data/05_model_input/test_data.csv
 
 trained_multi_target_models:
   type: pickle.PickleDataset
