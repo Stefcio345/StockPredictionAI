@@ -63,9 +63,7 @@ def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
     results = {}
     for label, predictor in predictors.items():
         cleaned = input_df.drop(columns=[col for col in input_df.columns if col.endswith("_target")], errors="ignore")
-        path = f"/home/Franke/Projects/StockPredictionAI/ai_stock_predictor/data/05_model_input/{label.replace("_target", "")}"
-        inference = MultiModalPredictor.load(path)
-        pred = inference.predict(cleaned)
+        pred = predictor.predict(cleaned)
 
         results[label.replace("_target", "")] = round(pred.values[0], 2)
     return results
@@ -75,6 +73,7 @@ st.title("📈 S&P 500 Stock Price Predictor")
 
 ticker_input = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, GOOG):", value="AAPL").upper()
 date_input = st.date_input("Select date to predict:", pd.to_datetime("2025-05-01"))
+number_of_days_to_predict = st.number_input("input number of days to predcit:", 7)
 
 if st.button("Predict"):
     with st.spinner("Downloading and processing data..."):
@@ -89,8 +88,9 @@ if st.button("Predict"):
 
             row = merged[merged["Date"].dt.date == date_input]
 
-            if row.empty:
-                st.warning("No data available for that ticker on the selected date.")
+            if merged[merged["Date"].dt.date == date_input].empty:
+                date_input = max(merged[merged["Date"].dt.date < date_input]["Date"].dt.date)
+                st.warning("No data available on that date. Prediction will continue from the closest earlier available date: " + date_input)
             else:
                 st.success("Starting Prediction")
 
@@ -105,7 +105,7 @@ if st.button("Predict"):
 
                 print(start_date, end_date)
 
-                while start_date <= end_date:
+                for _ in range(int(number_of_days_to_predict)):
 
                     # 1. Run full preprocessing on the rolling dataset
                     processed = preprocess(history_until_now)
@@ -117,7 +117,7 @@ if st.button("Predict"):
                         st.warning(f"No data available to preprocess on {start_date}")
                         break
 
-                    # Code specifically to add bolerplate data to prediciton as Multimodal does not work with single row of data
+                    # Code specifically to add boilerplate data to prediciton as Multimodal does not work with single row of data
                     empty_row = current_row.iloc[0:1].copy()
                     for col in empty_row.columns:
                         if pd.api.types.is_integer_dtype(empty_row[col]):
@@ -209,12 +209,13 @@ if st.button("Predict"):
                     decreasing_line_color='dimgray'
                 ))
 
-                # Predicted close as line
+                # Predicted typical price as line
+                prediction_df['Typical price'] = (prediction_df['High'] + prediction_df['Low'] + prediction_df['Close']) / 3
                 fig.add_trace(go.Scatter(
                     x=prediction_df["Date"],
-                    y=prediction_df["Close"],
+                    y=prediction_df["Typical price"],
                     mode='lines+markers',
-                    name="Predicted Close",
+                    name="Predicted typical price",
                     line=dict(color='lime', width=2, dash='dash')
                 ))
 
