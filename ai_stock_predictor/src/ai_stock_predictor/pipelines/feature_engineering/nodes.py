@@ -18,7 +18,6 @@ def add_lag_features(df: pd.DataFrame, lag_days: list[int]) -> pd.DataFrame:
     for lag in lag_days:
         df[f"lag_{lag}"] = df.groupby("Symbol")["Close"].shift(lag)
 
-    # Example: lag RSI and MA_10 if they exist
     if 'RSI' in df.columns:
         for lag in [1, 2]:
             df[f"RSI_lag_{lag}"] = df.groupby("Symbol")["RSI"].shift(lag)

@@ -15,3 +15,4 @@ target_columns:
   - Volume
 
 ticker:
+  "AAPL"

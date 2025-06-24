@@ -11,7 +11,7 @@ def create_pipeline(**kwargs) -> Pipeline:
         ),
         node(
             func=train_multi_target_models,
-            inputs=["train_data", "params:target_columns"],
+            inputs=["train_data", "test_data", "params:target_columns"],
             outputs="trained_multi_target_models",
             name="train_multi_target_models_node",
         ),

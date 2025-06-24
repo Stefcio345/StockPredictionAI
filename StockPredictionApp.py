@@ -2,28 +2,24 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import joblib
+import os
 import plotly.graph_objects as go
 import numpy as np
-from autogluon.multimodal import MultiModalPredictor
+from Azure_utils import download_model
 
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_technical_indicators
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_lag_features
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_date_features
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_company_features
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_corporate_action_features
-
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_merge.nodes import merge_both_datasets
-
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import convert_date_columns
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import clean_founded_column
 from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import remove_unused_columns
 
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.model_training.nodes import split_data
-
-
-
 from datetime import timedelta
 
+# === Data Download
 @st.cache_data
 def download_stocks_information():
     url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
@@ -46,7 +42,7 @@ def process_after_download(info_df: pd.DataFrame, history_df: pd.DataFrame, tick
     merged_df = merge_both_datasets(info_df, history_df)
     return merged_df
 
-# === Full preprocessing #TODO: Copy this from kedro
+# === Full preprocessing
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     df = add_technical_indicators(df)
     df = add_lag_features(df, lag_days=[1, 2, 3, 5, 10])
@@ -56,7 +52,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # === Load trained models
-predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
+if not os.path.exists("downloaded_model.pkl"):
+    with st.spinner("Downloading model..."):
+        download_model()
+#Model wczytywany do pamięci
+predictors = joblib.load("downloaded_model.pkl")
+#predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
 
 # === Predict function
 def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
@@ -64,7 +65,6 @@ def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
     for label, predictor in predictors.items():
         cleaned = input_df.drop(columns=[col for col in input_df.columns if col.endswith("_target")], errors="ignore")
         pred = predictor.predict(cleaned)
-
         results[label.replace("_target", "")] = round(pred.values[0], 2)
     return results
 

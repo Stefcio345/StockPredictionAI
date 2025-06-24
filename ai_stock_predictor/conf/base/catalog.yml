@@ -73,12 +73,24 @@ model_input_table:
   load_args:
     engine: auto
 
+train_data:
+  type: pandas.ParquetDataset
+  filepath: data/05_models/stocks_train.parquet
+  load_args:
+    engine: auto
+
+test_data:
+  type: pandas.ParquetDataset
+  filepath: data/05_models/stocks_test.parquet
+  load_args:
+    engine: auto
+
 trained_multi_target_models:
   type: pickle.PickleDataset
   filepath: data/05_models/trained_multi_target_models.pkl
 
 multi_target_metrics:
-  type: yaml.YAMLDataset
-  filepath: data/06_reports/multi_target_metrics.yaml
+  type: json.JSONDataset
+  filepath: data/06_reports/multi_target_metrics.json
   save_args:
-    default_flow_style: false
+    indent: 2

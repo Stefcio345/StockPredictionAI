@@ -28,11 +28,10 @@ def split_data(data: pd.DataFrame, target_columns: list):
 
     for symbol, group in data.groupby("Symbol"):
         group = group.sort_values("Date")
-        # Get the cutoff date
-        cutoff_date = group["Date"].max() - pd.Timedelta(days=36)
 
-        # Split based on cutoff
+        cutoff_date = group["Date"].max() - pd.Timedelta(days=36)
         test_mask = group["Date"] > cutoff_date
+
         test_parts.append(group[test_mask])
         train_parts.append(group[~test_mask])
 
@@ -42,7 +41,7 @@ def split_data(data: pd.DataFrame, target_columns: list):
     return train_data, test_data
 
 
-def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
+def train_multi_target_models(train_data: pd.DataFrame, test_data: pd.DataFrame, target_columns: list):
     predictors = {}
     target_labels = [f"{col}_target" for col in target_columns]
 
@@ -59,9 +58,11 @@ def train_multi_target_models(train_data: pd.DataFrame, target_columns: list):
         predictor = MultiModalPredictor(label=label_col)
         predictors[label_col] = predictor.fit(
             train_data=features,
-            time_limit=60
+            time_limit=60,
+            tuning_data=test_data
         )
         predictor.save(f"data/05_models/{target}")
+        print(predictor.evaluate(test_data))
 
     return predictors
 
@@ -93,28 +94,29 @@ def evaluate_multi_target_models(predictors: dict, test_data: pd.DataFrame, targ
 
     # Correlation heatmaps
     if show_heatmaps:
-        pred_df = pd.DataFrame(all_preds)
-        true_df = pd.DataFrame(all_truths)
-        plot_prediction_correlation_matrices(pred_df, true_df)
+        plot_feature_target_correlation(test_data, target_columns)
 
     return metrics
 
-def plot_prediction_correlation_matrices(pred_df: pd.DataFrame, true_df: pd.DataFrame):
-    # Correlation between each target's prediction and ground truth
-    print("\n🔍 Correlation between predicted and actual values:")
-    combined_corr = pred_df.corrwith(true_df)
-    print(combined_corr)
+def plot_feature_target_correlation(data: pd.DataFrame, target_columns: list):
+    target_labels = [f"{col}_target" for col in target_columns]
 
-    # 1. Correlation heatmap of predictions
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(pred_df.corr(), annot=True, cmap="coolwarm", fmt=".2f")
-    plt.title("📈 Prediction Cross-Correlation Matrix")
-    plt.tight_layout()
-    plt.show()
+    # Exclude non-numeric columns and target labels
+    numeric_data = data.select_dtypes(include=[np.number])
+    feature_cols = [col for col in numeric_data.columns if col not in target_labels]
 
-    # 2. Correlation heatmap of true targets
-    plt.figure(figsize=(8, 6))
-    sns.heatmap(true_df.corr(), annot=True, cmap="viridis", fmt=".2f")
-    plt.title("📊 True Target Cross-Correlation Matrix")
-    plt.tight_layout()
-    plt.show()
+    for target in target_labels:
+        print(f"\n🔍 Correlation with target: {target}")
+        corr_series = numeric_data[feature_cols + [target]].corr()[target].drop(target)
+
+        # Print top correlations
+        print(corr_series.sort_values(ascending=False).head(10))
+
+        # Plot
+        plt.figure(figsize=(10, 6))
+        corr_series.sort_values(ascending=False).plot(kind='bar', color='skyblue')
+        plt.title(f"Feature Correlation with {target}")
+        plt.ylabel("Correlation Coefficient")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
