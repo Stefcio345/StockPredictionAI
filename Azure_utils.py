@@ -3,6 +3,7 @@ from azure.storage.blob import BlobServiceClient
 
 def download_model():
     connection_string = ""
+
     # Set these values
     container_name = "container"
     blob_name = "trained_multi_target_models.pkl"

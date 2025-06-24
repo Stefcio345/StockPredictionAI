@@ -58,8 +58,8 @@ def train_multi_target_models(train_data: pd.DataFrame, test_data: pd.DataFrame,
         predictor = MultiModalPredictor(label=label_col)
         predictors[label_col] = predictor.fit(
             train_data=features,
-            time_limit=60,
-            tuning_data=test_data
+            time_limit=120,
+            tuning_data=test_data,
         )
         predictor.save(f"data/05_models/{target}")
         print(predictor.evaluate(test_data))
@@ -82,12 +82,12 @@ def evaluate_multi_target_models(predictors: dict, test_data: pd.DataFrame, targ
         # Metrics
         mse = mean_squared_error(y_true, y_pred)
         rmse = np.sqrt(mse)
-        metrics[f"{target}_RMSE"] = rmse
-        metrics[f"{target}_MAE"] = mean_absolute_error(y_true, y_pred)
-        metrics[f"{target}_R2"] = r2_score(y_true, y_pred)
-        metrics[f"{target}_MAPE"] = np.mean(np.abs((y_true - y_pred) / y_true.replace(0, np.nan))) * 100
-        metrics[f"{target}_SMAPE"] = smape(y_true, y_pred)
-        metrics[f"{target}_Correlation"] = np.corrcoef(y_true, y_pred)[0, 1]
+        metrics[f"{target}_RMSE"] = round(rmse, 2)
+        metrics[f"{target}_MAE"] = round(mean_absolute_error(y_true, y_pred), 2)
+        metrics[f"{target}_R2"] = round(r2_score(y_true, y_pred), 2)
+        metrics[f"{target}_MAPE"] = round(np.mean(np.abs((y_true - y_pred) / y_true.replace(0, np.nan))) * 100, 2)
+        metrics[f"{target}_SMAPE"] = round(smape(y_true, y_pred), 2)
+        metrics[f"{target}_Correlation"] = round(np.corrcoef(y_true, y_pred)[0, 1], 2)
 
         all_preds[target] = y_pred
         all_truths[target] = y_true

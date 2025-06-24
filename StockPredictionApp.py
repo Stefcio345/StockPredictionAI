@@ -55,9 +55,12 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
 if not os.path.exists("downloaded_model.pkl"):
     with st.spinner("Downloading model..."):
         download_model()
-#Model wczytywany do pamięci
-predictors = joblib.load("downloaded_model.pkl")
-#predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
+
+if "predictors" not in st.session_state:
+    with st.spinner("Loading model..."):
+        st.session_state.predictors = joblib.load("downloaded_model.pkl")
+
+predictors = st.session_state.predictors
 
 # === Predict function
 def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
@@ -90,136 +93,138 @@ if st.button("Predict"):
 
             if merged[merged["Date"].dt.date == date_input].empty:
                 date_input = max(merged[merged["Date"].dt.date < date_input]["Date"].dt.date)
-                st.warning("No data available on that date. Prediction will continue from the closest earlier available date: " + date_input)
-            else:
-                st.success("Starting Prediction")
+                st.warning(
+                    f"No data available on that date. Prediction will continue from the closest earlier available date: {date_input.strftime('%Y-%m-%d')}"
+                )
 
-                # Start recursive prediction
-                predictions = []
-                start_date = date_input
-                merged["Date"] = merged["Date"].dt.date
-                end_date = max(merged["Date"])
+            st.success("Starting Prediction")
 
-                # Keep original processed data until start_date
-                history_until_now = merged[merged["Date"] <= start_date].copy()
+            # Start recursive prediction
+            predictions = []
+            start_date = date_input
+            merged["Date"] = merged["Date"].dt.date
+            end_date = max(merged["Date"])
 
-                print(start_date, end_date)
+            # Keep original processed data until start_date
+            history_until_now = merged[merged["Date"] <= start_date].copy()
 
-                for _ in range(int(number_of_days_to_predict)):
+            print(start_date, end_date)
 
-                    # 1. Run full preprocessing on the rolling dataset
-                    processed = preprocess(history_until_now)
+            for _ in range(int(number_of_days_to_predict)):
 
-                    # 2. Get last row for prediction
-                    current_row = processed[processed["Date"].dt.normalize() == pd.to_datetime(start_date)].copy()
+                # 1. Run full preprocessing on the rolling dataset
+                processed = preprocess(history_until_now)
 
-                    if current_row.empty:
-                        st.warning(f"No data available to preprocess on {start_date}")
-                        break
+                # 2. Get last row for prediction
+                current_row = processed[processed["Date"].dt.normalize() == pd.to_datetime(start_date)].copy()
 
-                    # Code specifically to add boilerplate data to prediciton as Multimodal does not work with single row of data
-                    empty_row = current_row.iloc[0:1].copy()
-                    for col in empty_row.columns:
-                        if pd.api.types.is_integer_dtype(empty_row[col]):
-                            empty_row[col] = empty_row[col].astype("float")
-                        elif pd.api.types.is_datetime64_any_dtype(empty_row[col]):
-                            empty_row[col] = pd.NaT
-                        else:
-                            empty_row[col] = empty_row[col].astype("object")
-                    empty_row.loc[:] = np.nan
-                    batched = pd.concat([current_row, empty_row], ignore_index=True)
+                if current_row.empty:
+                    st.warning(f"No data available to preprocess on {start_date}")
+                    break
 
-                    # 3. Predict
-                    prediction = predict(predictors, batched)
+                # Code specifically to add boilerplate data to prediciton as Multimodal does not work with single row of data
+                empty_row = current_row.iloc[0:1].copy()
+                for col in empty_row.columns:
+                    if pd.api.types.is_integer_dtype(empty_row[col]):
+                        empty_row[col] = empty_row[col].astype("float")
+                    elif pd.api.types.is_datetime64_any_dtype(empty_row[col]):
+                        empty_row[col] = pd.NaT
+                    else:
+                        empty_row[col] = empty_row[col].astype("object")
+                empty_row.loc[:] = np.nan
+                batched = pd.concat([current_row, empty_row], ignore_index=True)
 
-                    # 4. Create fake future row from prediction
-                    new_row = current_row.copy()
+                # 3. Predict
+                prediction = predict(predictors, batched)
 
-                    for k, v in prediction.items():
-                        new_row[k] = v
+                # 4. Create fake future row from prediction
+                new_row = current_row.copy()
 
-                    new_row["Date"] = start_date + timedelta(days=1)
+                for k, v in prediction.items():
+                    new_row[k] = v
 
-                    prediction["Date"] = start_date
-                    predictions.append(prediction)
+                new_row["Date"] = start_date + timedelta(days=1)
 
-                    # 5. Append to rolling history
-                    history_until_now = pd.concat([history_until_now, new_row], ignore_index=True)
+                prediction["Date"] = start_date
+                predictions.append(prediction)
 
-                    # 6. Step forward
-                    start_date += timedelta(days=1)
+                # 5. Append to rolling history
+                history_until_now = pd.concat([history_until_now, new_row], ignore_index=True)
+
+                # 6. Step forward
+                start_date += timedelta(days=1)
 
 
-                prediction_df = pd.DataFrame(predictions)
-                st.success("Recursive prediction complete.")
+            prediction_df = pd.DataFrame(predictions)
+            st.success("Recursive prediction complete.")
 
-                # ======== PLOT CHARTS =======
-                real_df = merged[(merged["Date"] >= prediction_df["Date"].min()) &
-                                 (merged["Date"] <= prediction_df["Date"].max())]
+            # ======== PLOT CHARTS =======
+            real_df = merged[(merged["Date"] >= prediction_df["Date"].min()) &
+                             (merged["Date"] <= prediction_df["Date"].max())]
 
-                col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
 
-                with col1:
-                    st.subheader("Predicted Candlestick - " + ticker_input)
-                    fig_pred = go.Figure(data=[
-                        go.Candlestick(
-                            x=prediction_df["Date"],
-                            open=prediction_df["Open"],
-                            high=prediction_df["High"],
-                            low=prediction_df["Low"],
-                            close=prediction_df["Close"],
-                            increasing_line_color='green',
-                            decreasing_line_color='red',
-                            name='Predicted'
-                        )
-                    ])
-                    fig_pred.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-                    st.plotly_chart(fig_pred, use_container_width=True)
+            with col1:
+                st.subheader("Predicted Candlestick - " + ticker_input)
+                fig_pred = go.Figure(data=[
+                    go.Candlestick(
+                        x=prediction_df["Date"],
+                        open=prediction_df["Open"],
+                        high=prediction_df["High"],
+                        low=prediction_df["Low"],
+                        close=prediction_df["Close"],
+                        increasing_line_color='green',
+                        decreasing_line_color='red',
+                        name='Predicted'
+                    )
+                ])
+                fig_pred.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
+                st.plotly_chart(fig_pred, use_container_width=True)
 
-                with col2:
-                    st.subheader("Real Candlestick - " + ticker_input)
-                    fig_real = go.Figure(data=[
-                        go.Candlestick(
-                            x=real_df["Date"],
-                            open=real_df["Open"],
-                            high=real_df["High"],
-                            low=real_df["Low"],
-                            close=real_df["Close"],
-                            increasing_line_color='blue',
-                            decreasing_line_color='orange',
-                            name='Real'
-                        )
-                    ])
-                    fig_real.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-                    st.plotly_chart(fig_real, use_container_width=True)
+            with col2:
+                st.subheader("Real Candlestick - " + ticker_input)
+                fig_real = go.Figure(data=[
+                    go.Candlestick(
+                        x=real_df["Date"],
+                        open=real_df["Open"],
+                        high=real_df["High"],
+                        low=real_df["Low"],
+                        close=real_df["Close"],
+                        increasing_line_color='blue',
+                        decreasing_line_color='orange',
+                        name='Real'
+                    )
+                ])
+                fig_real.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
+                st.plotly_chart(fig_real, use_container_width=True)
 
-                st.subheader("Real vs Predicted - " + ticker_input)
+            st.subheader("Real vs Predicted - " + ticker_input)
 
-                fig = go.Figure()
+            fig = go.Figure()
 
-                # Real candlestick
-                fig.add_trace(go.Candlestick(
-                    x=real_df["Date"],
-                    open=real_df["Open"],
-                    high=real_df["High"],
-                    low=real_df["Low"],
-                    close=real_df["Close"],
-                    name="Real",
-                    increasing_line_color='gray',
-                    decreasing_line_color='dimgray'
-                ))
+            # Real candlestick
+            fig.add_trace(go.Candlestick(
+                x=real_df["Date"],
+                open=real_df["Open"],
+                high=real_df["High"],
+                low=real_df["Low"],
+                close=real_df["Close"],
+                name="Real",
+                increasing_line_color='gray',
+                decreasing_line_color='dimgray'
+            ))
 
-                # Predicted typical price as line
-                prediction_df['Typical price'] = (prediction_df['High'] + prediction_df['Low'] + prediction_df['Close']) / 3
-                fig.add_trace(go.Scatter(
-                    x=prediction_df["Date"],
-                    y=prediction_df["Typical price"],
-                    mode='lines+markers',
-                    name="Predicted typical price",
-                    line=dict(color='lime', width=2, dash='dash')
-                ))
+            # Predicted typical price as line
+            prediction_df['Typical price'] = (prediction_df['High'] + prediction_df['Low'] + prediction_df['Close']) / 3
+            fig.add_trace(go.Scatter(
+                x=prediction_df["Date"],
+                y=prediction_df["Typical price"],
+                mode='lines+markers',
+                name="Predicted typical price",
+                line=dict(color='lime', width=2, dash='dash')
+            ))
 
-                fig.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-                st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
+            st.plotly_chart(fig, use_container_width=True)
 
-                st.write(prediction_df)
+            st.write(prediction_df)
