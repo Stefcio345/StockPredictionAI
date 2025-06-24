@@ -178,3 +178,4 @@ cython_debug/
 
 /ai_stock_predictor/data/*
 /ai_stock_predictor/AutogluonModels/*
+downloaded_model.pkl
