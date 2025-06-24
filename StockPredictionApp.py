@@ -52,13 +52,18 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # === Load trained models
-if not os.path.exists("downloaded_model.pkl"):
-    with st.spinner("Downloading model..."):
-        download_model()
+try:
+    if not os.path.exists("downloaded_model.pkl"):
+        with st.spinner("Downloading model..."):
+            download_model()
 
-if "predictors" not in st.session_state:
-    with st.spinner("Loading model..."):
-        st.session_state.predictors = joblib.load("downloaded_model.pkl")
+    if "predictors" not in st.session_state:
+        with st.spinner("Loading model..."):
+            st.session_state.predictors = joblib.load("downloaded_model.pkl")
+except:
+    with st.spinner("Loading model from kedro..."):
+        st.session_state.predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
+
 
 predictors = st.session_state.predictors
 
@@ -116,7 +121,7 @@ if st.button("Predict"):
                 processed = preprocess(history_until_now)
 
                 # 2. Get last row for prediction
-                current_row = processed[processed["Date"].dt.normalize() == pd.to_datetime(start_date)].copy()
+                current_row = processed[processed["Date"] == processed["Date"].max()].copy()
 
                 if current_row.empty:
                     st.warning(f"No data available to preprocess on {start_date}")
@@ -152,7 +157,10 @@ if st.button("Predict"):
                 history_until_now = pd.concat([history_until_now, new_row], ignore_index=True)
 
                 # 6. Step forward
-                start_date += timedelta(days=1)
+                while True:
+                    start_date += timedelta(days=1)
+                    if start_date.weekday() < 5:
+                        break
 
 
             prediction_df = pd.DataFrame(predictions)
