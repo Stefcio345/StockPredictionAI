@@ -12,57 +12,79 @@ def smape(y_true, y_pred):
     diff = np.abs(y_true - y_pred) / denominator
     return np.mean(diff) * 100
 
-def split_data(data: pd.DataFrame, target_columns: list):
-    # Ensure Date is datetime
-    data['Date'] = pd.to_datetime(data['Date'])
+def split_data(data: pd.DataFrame, target_columns: list, test_days: int = 36):
+    data = data.copy()
 
-    # Shift targets before splitting
+    # Sort BEFORE shifting
+    data["Date"] = pd.to_datetime(data["Date"])
+    data = data.sort_values(["Symbol", "Date"]).reset_index(drop=True)
+
+    # Create next-day targets
     for col in target_columns:
         data[f"{col}_target"] = data.groupby("Symbol")[col].shift(-1)
 
-    # Drop rows where the target couldn't be computed
-    data = data.dropna(subset=[f"{col}_target" for col in target_columns])
+    target_label_cols = [f"{c}_target" for c in target_columns]
 
-    train_parts = []
-    test_parts = []
+    # Drop rows without future targets (last row per symbol)
+    data = data.dropna(subset=target_label_cols)
 
-    for symbol, group in data.groupby("Symbol"):
+    train_parts, test_parts = [], []
+
+    for symbol, group in data.groupby("Symbol", sort=False):
         group = group.sort_values("Date")
+        cutoff_date = group["Date"].max() - pd.Timedelta(days=test_days)
 
-        cutoff_date = group["Date"].max() - pd.Timedelta(days=36)
         test_mask = group["Date"] > cutoff_date
-
         test_parts.append(group[test_mask])
         train_parts.append(group[~test_mask])
 
-    train_data = pd.concat(train_parts)
-    test_data = pd.concat(test_parts)
+    train_data = pd.concat(train_parts).reset_index(drop=True)
+    test_data = pd.concat(test_parts).reset_index(drop=True)
 
     return train_data, test_data
 
 
-def train_multi_target_models(train_data: pd.DataFrame, test_data: pd.DataFrame, target_columns: list):
+def train_multi_target_models(
+    train_data: pd.DataFrame,
+    test_data: pd.DataFrame,
+    target_columns: list,
+    time_limit: int = 120,
+):
+    train_data = train_data.copy()
+    test_data = test_data.copy()
+
     predictors = {}
-    target_labels = [f"{col}_target" for col in target_columns]
+
+    target_label_cols = [f"{c}_target" for c in target_columns]
+
+    # everything except *_target is a candidate feature
+    base_feature_cols = [c for c in train_data.columns if c not in target_label_cols]
 
     for target in target_columns:
         label_col = f"{target}_target"
-        print(f"Training model for target: {target}")
+        print(f"\n=== Training model for target: {label_col} ===")
 
-        # Drop the label columns (future targets) of *other* targets
-        other_target_labels = [col for col in target_labels if (col != label_col)]
-        features = train_data.drop(columns=other_target_labels)
+        cols_for_this_model = base_feature_cols + [label_col]
 
-        print(f"Features: {features.columns}")
+        train_df = train_data[cols_for_this_model].dropna(subset=[label_col])
+        test_df = test_data[cols_for_this_model].dropna(subset=[label_col])
 
-        predictor = MultiModalPredictor(label=label_col)
-        predictors[label_col] = predictor.fit(
-            train_data=features,
-            time_limit=120,
-            tuning_data=test_data,
+        predictor = MultiModalPredictor(
+            label=label_col,
+            problem_type="regression",
         )
+
+        # NO tuning_data → AutoGluon makes its own validation from train_df
+        predictor.fit(
+            train_data=train_df,
+            time_limit=time_limit,
+        )
+
+        metrics = predictor.evaluate(test_df)  # true holdout
+        print("Test metrics:", metrics)
+
         predictor.save(f"data/05_models/{target}")
-        print(predictor.evaluate(test_data))
+        predictors[label_col] = predictor
 
     return predictors
 
