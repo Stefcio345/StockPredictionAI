@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Franek – AI Stock Predictor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Chart.js for charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-alt: #020817;
+      --accent: #22c55e;
+      --accent-soft: rgba(34, 197, 94, 0.3);
+      --accent-2: #60a5fa;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --card-bg: rgba(15, 23, 42, 0.85);
+      --border-subtle: rgba(148, 163, 184, 0.15);
+      --shadow-soft: 0 18px 40px rgba(15, 23, 42, 0.9);
+      --radius-xl: 24px;
+      --radius-lg: 18px;
+      --radius-full: 999px;
+      --gradient-hero: radial-gradient(circle at top left, #1e293b, #020617 55%);
+      --gradient-chip: linear-gradient(135deg, rgba(34, 197, 94, 0.22), rgba(56, 189, 248, 0.18));
+      --speed-fast: 180ms;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at top, #020617, #000000 60%);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='noStitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+      mix-blend-mode: soft-light;
+      z-index: -1;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 16px 80px;
+    }
+
+    @media (min-width: 1024px) {
+      main {
+        padding: 32px 0 96px;
+      }
+    }
+
+    /* Top nav / header */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(18px);
+      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.9), rgba(2, 6, 23, 0.0));
+      border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .nav-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-orb {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: conic-gradient(from 210deg, #22c55e, #22c55e, #0ea5e9, #6366f1, #22c55e);
+      position: relative;
+      box-shadow: 0 0 24px rgba(34, 197, 94, 0.8);
+      animation: spin 12s linear infinite;
+    }
+
+    .logo-orb::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border-radius: inherit;
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.9), rgba(15,23,42,0.9));
+    }
+
+    .logo-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.05;
+    }
+
+    .logo-title {
+      font-size: 14px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .logo-name {
+      font-weight: 600;
+      font-size: 17px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      font-size: 14px;
+    }
+
+    .nav-link {
+      position: relative;
+      padding: 4px 0;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color var(--speed-fast) ease;
+      border: none;
+      background: none;
+      font: inherit;
+    }
+
+    .nav-link::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      bottom: -2px;
+      width: 0%;
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width var(--speed-fast) ease;
+    }
+
+    .nav-link:hover {
+      color: var(--text);
+    }
+    .nav-link:hover::after {
+      width: 100%;
+    }
+
+    /* Hero / Intro */
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2.2fr);
+      gap: 32px;
+      margin-top: 40px;
+      margin-bottom: 56px;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .hero-left {
+      padding: 24px 22px 24px;
+      border-radius: var(--radius-xl);
+      background: var(--gradient-hero);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: var(--shadow-soft);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-left::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 5% -10%, rgba(56, 189, 248, 0.12), transparent 55%),
+        radial-gradient(circle at 90% 10%, rgba(34, 197, 94, 0.16), transparent 55%);
+      opacity: 0.65;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.6);
+      gap: 8px;
+      margin-bottom: 14px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: radial-gradient(circle, #22c55e, #16a34a);
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.75);
+    }
+
+    .pill-label {
+      opacity: 0.9;
+    }
+
+    .hero-title {
+      font-size: clamp(30px, 4vw, 40px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+    }
+
+    .hero-title span {
+      background: linear-gradient(135deg, #22c55e, #38bdf8);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 16px;
+      color: var(--muted);
+      max-width: 34rem;
+      margin-bottom: 18px;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .chip {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      font-size: 12px;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chip-icon {
+      font-size: 14px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn-primary {
+      border-radius: var(--radius-full);
+      padding: 9px 18px;
+      border: none;
+      background: linear-gradient(120deg, #22c55e, #0ea5e9);
+      color: #020617;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 16px 40px rgba(22, 163, 74, 0.65);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 20px 55px rgba(22, 163, 74, 0.8);
+    }
+
+    .hero-right {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-subtle);
+      padding: 16px 16px 14px;
+      position: relative;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.9);
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 5% -10%, rgba(56, 189, 248, 0.18), transparent 50%);
+      mix-blend-mode: soft-light;
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .card-tag {
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(34, 197, 94, 0.45);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      background: rgba(22, 163, 74, 0.12);
+      color: rgba(190, 242, 100, 0.95);
+    }
+
+    .mini-metric-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .mini-metric {
+      flex: 1;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mini-metric-value {
+      font-size: 17px;
+      font-weight: 500;
+    }
+
+    .mini-metric-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #64748b;
+      margin-top: 2px;
+    }
+
+    .sparkline {
+      margin-top: 6px;
+      position: relative;
+      height: 58px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: radial-gradient(circle at top left, rgba(15,23,42,1), rgba(15,23,42,0.7));
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+
+    .sparkline canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px dashed rgba(148, 163, 184, 0.5);
+      color: var(--muted);
+    }
+
+    .section {
+      margin-bottom: 48px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      gap: 12px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .section-subtitle {
+      font-size: 13px;
+      color: #6b7280;
+      max-width: 400px;
+    }
+
+    /* AI DEMO SECTION */
+    .demo-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2.1fr) minmax(0, 3fr);
+      gap: 18px;
+    }
+    @media (max-width: 900px) {
+      .demo-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .demo-form-card {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top left, rgba(15,23,42,1), #020617);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      padding: 16px 16px 15px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px 12px;
+      margin-top: 10px;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .field-label span {
+      color: var(--accent);
+    }
+
+    .input, .select {
+      background: rgba(15, 23, 42, 0.92);
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.65);
+      padding: 7px 11px;
+      font-size: 13px;
+      color: var(--text);
+      outline: none;
+      transition: border-color var(--speed-fast) ease, box-shadow var(--speed-fast) ease, background var(--speed-fast) ease;
+    }
+
+    .input:focus, .select:focus {
+      border-color: rgba(34, 197, 94, 0.9);
+      box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.8);
+      background: rgba(15, 23, 42, 1);
+    }
+
+    .select {
+      appearance: none;
+      -webkit-appearance: none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, #64748b 50%),
+        linear-gradient(135deg, #64748b 50%, transparent 50%);
+      background-position:
+        calc(100% - 12px) 9px,
+        calc(100% - 8px) 9px;
+      background-size: 5px 5px;
+      background-repeat: no-repeat;
+      padding-right: 24px;
+    }
+
+    .demo-footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .demo-status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .demo-status strong {
+      color: var(--accent);
+    }
+
+    .status-error {
+      color: #f97373;
+    }
+
+    .btn-run {
+      border-radius: var(--radius-full);
+      padding: 8px 16px;
+      border: none;
+      background: linear-gradient(120deg, #22c55e, #0ea5e9);
+      color: #020617;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 10px 28px rgba(22, 163, 74, 0.7);
+      transition: all 150ms ease-out;
+    }
+
+    .btn-run[disabled] {
+      opacity: 0.65;
+      cursor: wait;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .btn-run:hover:not([disabled]) {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 40px rgba(22, 163, 74, 0.85);
+    }
+
+    .demo-chart-card {
+      border-radius: var(--radius-xl);
+      background: radial-gradient(circle at top right, rgba(15,23,42,1), #020617);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      padding: 16px 16px 14px;
+      box-shadow: var(--shadow-soft);
+      min-height: 260px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .demo-chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .demo-chart-title {
+      font-size: 14px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .demo-chart-meta {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      flex: 1;
+      min-height: 210px;
+      margin-top: 6px;
+    }
+
+    .chart-placeholder {
+      font-size: 13px;
+      color: #6b7280;
+      border-radius: 18px;
+      border: 1px dashed rgba(148, 163, 184, 0.6);
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    canvas#predictionChart {
+      width: 100%;
+      height: 100%;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 26px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top nav -->
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="logo">
+        <div class="logo-orb"></div>
+        <div class="logo-text">
+          <div class="logo-title">AI Stock Predictor</div>
+          <div class="logo-name">Franek – ML Engineer</div>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <button class="nav-link" onclick="scrollToSection('demo')">Demo</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero" id="top">
+      <div class="hero-left">
+        <div class="hero-content">
+          <div class="pill">
+            <div class="pill-dot"></div>
+            <span class="pill-label">AI–Powered Stock Forecasting</span>
+          </div>
+          <h1 class="hero-title">
+            Predicting <span>markets</span> with production-grade ML.
+          </h1>
+          <p class="hero-subtitle">
+            S&amp;P 500 stock prediction with a full Kedro pipeline, technical indicators,
+            lag features and multi-target regressors, exposed as an interactive web demo.
+          </p>
+
+          <div class="hero-meta">
+            <div class="chip">
+              <span class="chip-icon">⚙️</span> Kedro &bull; Multi-target models
+            </div>
+            <div class="chip">
+              <span class="chip-icon">📈</span> S&amp;P 500 &amp; corporate fundamentals
+            </div>
+            <div class="chip">
+              <span class="chip-icon">☁</span> Azure storage deployment
+            </div>
+          </div>
+
+          <div class="hero-actions">
+            <button class="btn-primary" onclick="scrollToSection('demo')">
+              Try the predictor <span>→</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <article class="card">
+          <div class="card-header">
+            <div class="card-title">Live model snapshot</div>
+            <div class="card-tag">Simulated</div>
+          </div>
+
+          <div class="mini-metric-row">
+            <div class="mini-metric">
+              <div class="mini-metric-value" id="miniTicker">AAPL</div>
+              <div class="mini-metric-label">Current ticker</div>
+            </div>
+            <div class="mini-metric">
+              <div class="mini-metric-value" id="miniDate">2025-05-01</div>
+              <div class="mini-metric-label">Start date</div>
+            </div>
+          </div>
+
+          <div class="mini-metric-row">
+            <div class="mini-metric">
+              <div class="mini-metric-value" id="miniDays">7d</div>
+              <div class="mini-metric-label">Horizon</div>
+            </div>
+            <div class="mini-metric">
+              <div class="mini-metric-value" id="miniStatus">Idle</div>
+              <div class="mini-metric-label">Model status</div>
+            </div>
+          </div>
+
+          <div class="sparkline">
+            <canvas id="sparklineCanvas"></canvas>
+          </div>
+
+          <div class="badge-row">
+            <div class="badge">Feature-engineered with TA indicators</div>
+            <div class="badge">Recursive, multi-day forecasting</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- AI Demo -->
+    <section class="section" id="demo">
+      <div class="section-header">
+        <div class="section-title">AI Stock Predictor – Live Demo</div>
+        <div class="section-subtitle">
+          This UI talks to a Python backend that loads the trained Kedro model,
+          downloads S&amp;P 500 data, applies the full feature pipeline, and returns
+          recursive predictions for your chosen horizon.
+        </div>
+      </div>
+
+      <div class="demo-layout">
+        <!-- Left: form -->
+        <div class="demo-form-card">
+          <div class="card-header" style="margin-bottom: 6px;">
+            <div class="card-title">Configure prediction</div>
+            <div class="card-tag">Backend: /api/predict</div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label">
+                Stock ticker <span>*</span>
+              </label>
+              <input
+                id="tickerInput"
+                class="input"
+                placeholder="e.g. AAPL"
+                value="AAPL"
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">
+                Start date (YYYY-MM-DD) <span>*</span>
+              </label>
+              <input
+                id="dateInput"
+                class="input"
+                type="date"
+                value="2025-05-01"
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">
+                Days to predict <span>*</span>
+              </label>
+              <input
+                id="daysInput"
+                class="input"
+                type="number"
+                min="1"
+                max="60"
+                value="7"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label">
+              Backend endpoint (for local dev)
+            </label>
+            <input
+              id="endpointInput"
+              class="input"
+              placeholder="http://localhost:8000/api/predict"
+              value="/api/predict"
+            />
+          </div>
+
+          <div class="demo-footer-row">
+            <div class="demo-status" id="demoStatus">
+              <strong>Ready.</strong> Enter a ticker and run the model.
+            </div>
+            <button class="btn-run" id="runBtn">
+              <span>▶</span> Run prediction
+            </button>
+          </div>
+
+          <div style="margin-top: 8px; font-size: 11px; color: #6b7280;">
+            The Python backend should return JSON with <code>predictions</code> and <code>real</code>
+            OHLC arrays. This UI only handles visualization.
+          </div>
+        </div>
+
+        <!-- Right: chart -->
+        <div class="demo-chart-card">
+          <div class="demo-chart-header">
+            <div class="demo-chart-title">Real vs Predicted</div>
+            <div class="demo-chart-meta" id="chartMeta">
+              Waiting for first run…
+            </div>
+          </div>
+
+          <div class="chart-wrapper">
+            <div class="chart-placeholder" id="chartPlaceholder">
+              Run a prediction to see the model's forecast for
+              <strong style="margin: 0 4px;">Close</strong> prices vs
+              the actual market data.
+            </div>
+            <canvas id="predictionChart" style="display:none;"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        Built with HTML, CSS, JS and a Kedro-based stock prediction pipeline.
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function scrollToSection(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // Sparkline
+    (function initSparkline() {
+      const canvas = document.getElementById("sparklineCanvas");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const width = canvas.width = canvas.offsetWidth || 260;
+      const height = canvas.height = canvas.offsetHeight || 58;
+
+      const points = [];
+      const steps = 32;
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1);
+        const base = Math.sin(t * Math.PI * 2) * 0.35;
+        const noise = (Math.random() - 0.5) * 0.2;
+        const v = 0.5 + base + noise;
+        points.push(v);
+      }
+
+      const grd = ctx.createLinearGradient(0, 0, width, 0);
+      grd.addColorStop(0, "#22c55e");
+      grd.addColorStop(0.5, "#a3e635");
+      grd.addColorStop(1, "#38bdf8");
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.beginPath();
+      ctx.moveTo(0, height * (1 - points[0]));
+      for (let i = 1; i < steps; i++) {
+        const x = (i / (steps - 1)) * width;
+        const y = height * (1 - points[i]);
+        ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = grd;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.lineTo(width, height);
+      ctx.lineTo(0, height);
+      ctx.closePath();
+      const fill = ctx.createLinearGradient(0, 0, 0, height);
+      fill.addColorStop(0, "rgba(34, 197, 94, 0.45)");
+      fill.addColorStop(1, "rgba(15, 23, 42, 0.0)");
+      ctx.fillStyle = fill;
+      ctx.fill();
+    })();
+
+    let predictionChart = null;
+
+    function updateMiniPanel(ticker, date, days, statusText) {
+      document.getElementById("miniTicker").textContent = ticker.toUpperCase();
+      document.getElementById("miniDate").textContent = date;
+      document.getElementById("miniDays").textContent = days + "d";
+      document.getElementById("miniStatus").textContent = statusText;
+    }
+
+    function setStatus(msg, isError = false) {
+      const el = document.getElementById("demoStatus");
+      el.textContent = msg;
+      el.classList.toggle("status-error", !!isError);
+    }
+
+    function buildChart(predictions, real, ticker) {
+      const placeholder = document.getElementById("chartPlaceholder");
+      const canvas = document.getElementById("predictionChart");
+      const meta = document.getElementById("chartMeta");
+
+      if (!predictions || predictions.length === 0) {
+        placeholder.style.display = "flex";
+        canvas.style.display = "none";
+        meta.textContent = "No data returned from backend.";
+        return;
+      }
+
+      placeholder.style.display = "none";
+      canvas.style.display = "block";
+
+      const predDates = predictions.map(p => p.date);
+      const realDates = real && real.length ? real.map(r => r.date) : [];
+
+      const predClose = predictions.map(p => p.close);
+      const realClose = real && real.length ? real.map(r => r.close) : [];
+
+      const ctx = canvas.getContext("2d");
+
+      if (predictionChart) {
+        predictionChart.destroy();
+      }
+
+      const gradPred = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      gradPred.addColorStop(0, "#22c55e");
+      gradPred.addColorStop(1, "#a3e635");
+
+      const gradReal = ctx.createLinearGradient(0, 0, canvas.width, 0);
+      gradReal.addColorStop(0, "#38bdf8");
+      gradReal.addColorStop(1, "#6366f1");
+
+      predictionChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: predDates,
+          datasets: [
+            {
+              label: "Predicted close",
+              data: predClose,
+              borderColor: gradPred,
+              backgroundColor: "rgba(34, 197, 94, 0.12)",
+              borderWidth: 2,
+              tension: 0.25,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              fill: true
+            },
+            {
+              label: "Real close",
+              data: realClose,
+              borderColor: gradReal,
+              backgroundColor: "rgba(59, 130, 246, 0.12)",
+              borderWidth: 2,
+              tension: 0.25,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              fill: true,
+              hidden: !realClose.length
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", maxRotation: 0 },
+              grid: { color: "rgba(51, 65, 85, 0.6)" }
+            },
+            y: {
+              ticks: { color: "#9ca3af" },
+              grid: { color: "rgba(30, 41, 59, 0.7)" }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: { color: "#e5e7eb", usePointStyle: true }
+            },
+            tooltip: {
+              mode: "index",
+              intersect: false
+            }
+          },
+          interaction: { mode: "index", intersect: false }
+        }
+      });
+
+      meta.textContent = `Showing ${predictions.length} predicted days${realClose.length ? " with real market data overlay." : "."}`;
+    }
+
+    async function runPrediction() {
+      const runBtn = document.getElementById("runBtn");
+      const ticker = document.getElementById("tickerInput").value.trim();
+      const date = document.getElementById("dateInput").value;
+      const days = document.getElementById("daysInput").value;
+      const endpoint = (document.getElementById("endpointInput").value.trim() || "/api/predict");
+
+      if (!ticker || !date || !days) {
+        setStatus("Please fill in ticker, date and days.", true);
+        return;
+      }
+
+      runBtn.disabled = true;
+      setStatus("Calling backend model…");
+      updateMiniPanel(ticker, date, days, "Running…");
+
+      try {
+        const payload = {
+          ticker: ticker.toUpperCase(),
+          start_date: date,
+          days: Number(days)
+        };
+
+        const resp = await fetch("http://127.0.0.1:8000/api/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(`HTTP ${resp.status}: ${text}`);
+        }
+
+        const data = await resp.json();
+
+        const predictions = data.predictions || [];
+        const real = data.real || [];
+
+        if (!Array.isArray(predictions) || predictions.length === 0) {
+          setStatus("Backend responded but predictions are empty.", true);
+          updateMiniPanel(ticker, date, days, "No data");
+          buildChart([], [], ticker);
+          return;
+        }
+
+        setStatus(`Prediction complete for ${data.ticker || ticker}.`);
+        updateMiniPanel(ticker, date, days, "Ready");
+        buildChart(predictions, real, ticker);
+      } catch (err) {
+        console.error(err);
+        setStatus("Error calling backend: " + err.message, true);
+        updateMiniPanel(ticker, date, days, "Error");
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    document.getElementById("runBtn").addEventListener("click", runPrediction);
+  </script>
+</body>
+</html>

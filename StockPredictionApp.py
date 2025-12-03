@@ -1,40 +1,120 @@
-import streamlit as st
-import pandas as pd
-import yfinance as yf
-import joblib
 import os
-import plotly.graph_objects as go
+from datetime import date, timedelta
+from functools import lru_cache
+from typing import List, Dict
+
+import joblib
 import numpy as np
+import pandas as pd
+import requests
+import yfinance as yf
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+
 from Azure_utils import download_model
 
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_technical_indicators
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_lag_features
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_date_features
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_company_features
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import add_corporate_action_features
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_merge.nodes import merge_both_datasets
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import convert_date_columns
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import clean_founded_column
-from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import remove_unused_columns
+# Kedro feature engineering imports (your existing code)
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.feature_engineering.nodes import (
+    add_technical_indicators,
+    add_lag_features,
+    add_date_features,
+    add_company_features,
+    add_corporate_action_features,
+)
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_merge.nodes import (
+    merge_both_datasets,
+)
+from ai_stock_predictor.src.ai_stock_predictor.pipelines.data_cleaning.nodes import (
+    convert_date_columns,
+    clean_founded_column,
+    remove_unused_columns,
+)
 
-from datetime import timedelta
+# ==========================================================
+# Pydantic models
+# ==========================================================
 
-# === Data Download
-@st.cache_data
-def download_stocks_information():
-    url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
-    tables = pd.read_html(url)
-    return tables[0]
+class PredictRequest(BaseModel):
+    ticker: str = Field(..., description="Stock ticker, e.g. AAPL")
+    start_date: date = Field(..., description="Start date for prediction (YYYY-MM-DD)")
+    days: int = Field(..., gt=0, le=90, description="Number of trading days to predict")
 
-@st.cache_data
+class OHLCPoint(BaseModel):
+    date: str
+    open: float
+    high: float
+    low: float
+    close: float
+
+class PredictResponse(BaseModel):
+    ticker: str
+    predictions: List[OHLCPoint]
+    real: List[OHLCPoint]
+
+
+# ==========================================================
+# FastAPI app & CORS
+# ==========================================================
+
+app = FastAPI(
+    title="AI Stock Predictor Backend",
+    description="FastAPI backend serving Kedro-trained S&P 500 stock predictions.",
+    version="1.0.0",
+)
+
+# Allow frontend on any origin (lock this down later if needed)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ==========================================================
+# Data download / preprocessing (adapted from Streamlit code)
+# ==========================================================
+
+@lru_cache(maxsize=1)
+def download_sp500() -> pd.DataFrame:
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
+    # Without a proper User-Agent Wikipedia sometimes returns a stripped page
+    html = requests.get(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"}
+    ).text
+
+    tables = pd.read_html(html)
+
+    # Find the table that contains the 'Symbol' column
+    for table in tables:
+        if "Symbol" in table.columns:
+            df = table
+            break
+    else:
+        raise ValueError("Could not find S&P 500 table in Wikipedia page.")
+
+    # Clean column names (optional)
+    df.columns = [c.replace("\n", " ").strip() for c in df.columns]
+
+    return df
+
+
+@lru_cache(maxsize=128)
 def download_single_stock_history(ticker: str) -> pd.DataFrame:
+    """Historical OHLC data for a single ticker using yfinance."""
     t = yf.Ticker(ticker)
-    hist = t.history(start="2000-01-01", end="2025-06-18")
+    # You can adjust end date if you want strictly up-to-some-date behaviour
+    hist = t.history(start="2000-01-01")
     hist = hist.reset_index()
     hist["Ticker"] = ticker
     return hist
 
-def process_after_download(info_df: pd.DataFrame, history_df: pd.DataFrame, ticker: str):
+
+def process_after_download(info_df: pd.DataFrame, history_df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """Processes and merges info and history DataFrames for a given ticker."""
     info_df, history_df = remove_unused_columns(info_df, history_df, ticker)
     history_df = convert_date_columns(history_df)
@@ -42,8 +122,9 @@ def process_after_download(info_df: pd.DataFrame, history_df: pd.DataFrame, tick
     merged_df = merge_both_datasets(info_df, history_df)
     return merged_df
 
-# === Full preprocessing
+
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
+    """Full feature engineering pipeline, same as in your Streamlit app."""
     df = add_technical_indicators(df)
     df = add_lag_features(df, lag_days=[1, 2, 3, 5, 10])
     df = add_date_features(df)
@@ -51,188 +132,234 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     df = add_corporate_action_features(df)
     return df
 
-# === Load trained models
-try:
-    if not os.path.exists("downloaded_model.pkl"):
-        with st.spinner("Downloading model..."):
+
+# ==========================================================
+# Model loading (same logic as Streamlit, but without st)
+# ==========================================================
+
+def load_predictors() -> Dict[str, object]:
+    """
+    Load multi-target predictors.
+    Tries Azure_downloaded file first, then local Kedro models as fallback.
+    """
+    model_path_dl = "downloaded_model.pkl"
+    model_path_local = "./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl"
+
+    # Download from Azure if not present
+    if not os.path.exists(model_path_dl):
+        try:
+            print("[model] Downloading model from Azure...")
             download_model()
+        except Exception as e:
+            print("[model] Failed to download from Azure:", e)
 
-    if "predictors" not in st.session_state:
-        with st.spinner("Loading model..."):
-            st.session_state.predictors = joblib.load("downloaded_model.pkl")
-except:
-    with st.spinner("Loading model from kedro..."):
-        st.session_state.predictors = joblib.load("./ai_stock_predictor/data/05_models/trained_multi_target_models.pkl")
+    # Try downloaded model
+    if os.path.exists(model_path_dl):
+        print("[model] Loading model from:", model_path_dl)
+        predictors = joblib.load(model_path_dl)
+        return predictors
+
+    # Fallback: local kedro path
+    if os.path.exists(model_path_local):
+        print("[model] Loading model from:", model_path_local)
+        predictors = joblib.load(model_path_local)
+        return predictors
+
+    raise RuntimeError("No model file found (downloaded_model.pkl or Kedro model).")
 
 
-predictors = st.session_state.predictors
+PREDICTORS: Dict[str, object] = {}
 
-# === Predict function
-def predict(predictors: dict, input_df: pd.DataFrame) -> dict:
+
+@app.on_event("startup")
+def startup_event():
+    """
+    Initialize model once at startup.
+    """
+    global PREDICTORS
+    PREDICTORS = load_predictors()
+    print(f"[startup] Loaded predictors for targets: {list(PREDICTORS.keys())}")
+
+
+# ==========================================================
+# Core prediction logic (adapted from your Streamlit code)
+# ==========================================================
+
+def run_model_predict(predictors: Dict[str, object], input_df: pd.DataFrame) -> Dict[str, float]:
+    """
+    Run all target models on a (batched) input_df.
+    Mirrors your `predict` function from Streamlit.
+    """
     results = {}
+    # Remove any *_target columns so multi-target regressors don't choke
+    cleaned = input_df.drop(
+        columns=[col for col in input_df.columns if col.endswith("_target")],
+        errors="ignore",
+    )
+
     for label, predictor in predictors.items():
-        cleaned = input_df.drop(columns=[col for col in input_df.columns if col.endswith("_target")], errors="ignore")
-        pred = predictor.predict(cleaned)
-        results[label.replace("_target", "")] = round(pred.values[0], 2)
+        pred = predictor.predict(cleaned)  # usually returns numpy array or pandas
+        # label like "Open_target" -> "Open"
+        out_label = label.replace("_target", "")
+        # use first row (we batch 2 rows just to satisfy model)
+        results[out_label] = float(np.round(pred[0], 2))
     return results
 
-# === Streamlit UI
-st.title("📈 S&P 500 Stock Price Predictor")
 
-ticker_input = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, GOOG):", value="AAPL").upper()
-date_input = st.date_input("Select date to predict:", pd.to_datetime("2025-05-01"))
-number_of_days_to_predict = st.number_input("input number of days to predcit:", 7)
+def recursive_predict(
+    ticker: str,
+    start_date: date,
+    days: int,
+) -> (pd.DataFrame, pd.DataFrame):
+    """
+    Full recursive prediction, returning:
+      prediction_df (future OHLC predictions)
+      real_df       (real OHLC in the same date range, for comparison)
+    Logic mirrors your Streamlit implementation.
+    """
+    # 1. Download data
+    info_df = download_sp500()
+    if ticker not in info_df["Symbol"].values:
+        raise HTTPException(status_code=400, detail="Ticker not found in S&P 500 list.")
 
-if st.button("Predict"):
-    with st.spinner("Downloading and processing data..."):
-        info_df = download_stocks_information()
-        history_df = download_single_stock_history(ticker_input)
+    history_df = download_single_stock_history(ticker)
+    if history_df.empty:
+        raise HTTPException(status_code=400, detail="No historical data available for this ticker.")
 
-        if history_df.empty or ticker_input not in info_df["Symbol"].values:
-            st.error("Invalid ticker or no data available.")
-        else:
-            merged = process_after_download(info_df, history_df, ticker_input)
-            merged = preprocess(merged)
+    # 2. Merge & preprocess
+    merged = process_after_download(info_df, history_df, ticker)
 
-            row = merged[merged["Date"].dt.date == date_input]
+    # Make sure Date is date-type
+    if not np.issubdtype(merged["Date"].dtype, np.datetime64):
+        merged["Date"] = pd.to_datetime(merged["Date"])
 
-            if merged[merged["Date"].dt.date == date_input].empty:
-                date_input = max(merged[merged["Date"].dt.date < date_input]["Date"].dt.date)
-                st.warning(
-                    f"No data available on that date. Prediction will continue from the closest earlier available date: {date_input.strftime('%Y-%m-%d')}"
-                )
+    merged["Date"] = merged["Date"].dt.date
 
-            st.success("Starting Prediction")
+    # If exact start_date is not present, snap back to previous available trading day
+    if merged[merged["Date"] == start_date].empty:
+        possible = merged[merged["Date"] < start_date]
+        if possible.empty:
+            raise HTTPException(
+                status_code=400,
+                detail="Requested start_date is before any available data for this ticker.",
+            )
+        start_date = possible["Date"].max()
 
-            # Start recursive prediction
-            predictions = []
-            start_date = date_input
-            merged["Date"] = merged["Date"].dt.date
-            end_date = max(merged["Date"])
+    # Keep history up to start_date
+    history_until_now = merged[merged["Date"] <= start_date].copy()
 
-            # Keep original processed data until start_date
-            history_until_now = merged[merged["Date"] <= start_date].copy()
+    predictions = []
+    current_date = start_date
 
-            print(start_date, end_date)
+    for _ in range(days):
+        # 1. Full preprocessing on rolling dataset
+        processed = preprocess(history_until_now)
 
-            for _ in range(int(number_of_days_to_predict)):
+        # 2. Take last row for prediction
+        last_date = processed["Date"].max()
+        current_row = processed[processed["Date"] == last_date].copy()
+        if current_row.empty:
+            raise HTTPException(
+                status_code=500,
+                detail=f"No data available to preprocess for {current_date}",
+            )
 
-                # 1. Run full preprocessing on the rolling dataset
-                processed = preprocess(history_until_now)
+        # 3. Create "batched" input (your workaround for the multi-target model)
+        empty_row = current_row.iloc[0:1].copy()
+        for col in empty_row.columns:
+            if pd.api.types.is_integer_dtype(empty_row[col]):
+                empty_row[col] = empty_row[col].astype("float")
+            elif pd.api.types.is_datetime64_any_dtype(empty_row[col]):
+                empty_row[col] = pd.NaT
+            else:
+                empty_row[col] = empty_row[col].astype("object")
+        empty_row.loc[:] = np.nan
+        batched = pd.concat([current_row, empty_row], ignore_index=True)
 
-                # 2. Get last row for prediction
-                current_row = processed[processed["Date"] == processed["Date"].max()].copy()
+        # 4. Predict
+        pred_values = run_model_predict(PREDICTORS, batched)
 
-                if current_row.empty:
-                    st.warning(f"No data available to preprocess on {start_date}")
-                    break
+        # 5. Create new pseudo-future row (using predicted OHLC)
+        new_row = current_row.copy()
+        for k, v in pred_values.items():
+            if k in new_row.columns:
+                new_row[k] = v
+        # we set the new row's Date to *next* trading day
+        next_date = current_date
+        while True:
+            next_date = next_date + timedelta(days=1)
+            if next_date.weekday() < 5:  # Mon-Fri only
+                break
+        new_row["Date"] = next_date
 
-                # Code specifically to add boilerplate data to prediciton as Multimodal does not work with single row of data
-                empty_row = current_row.iloc[0:1].copy()
-                for col in empty_row.columns:
-                    if pd.api.types.is_integer_dtype(empty_row[col]):
-                        empty_row[col] = empty_row[col].astype("float")
-                    elif pd.api.types.is_datetime64_any_dtype(empty_row[col]):
-                        empty_row[col] = pd.NaT
-                    else:
-                        empty_row[col] = empty_row[col].astype("object")
-                empty_row.loc[:] = np.nan
-                batched = pd.concat([current_row, empty_row], ignore_index=True)
+        # 6. Save prediction for current_date (like in your original loop)
+        prediction_entry = {
+            "Date": current_date,
+            "Open": pred_values.get("Open", np.nan),
+            "High": pred_values.get("High", np.nan),
+            "Low": pred_values.get("Low", np.nan),
+            "Close": pred_values.get("Close", np.nan),
+        }
+        predictions.append(prediction_entry)
 
-                # 3. Predict
-                prediction = predict(predictors, batched)
+        # 7. Append new_row to rolling history and move on
+        history_until_now = pd.concat([history_until_now, new_row], ignore_index=True)
+        current_date = next_date
 
-                # 4. Create fake future row from prediction
-                new_row = current_row.copy()
+    prediction_df = pd.DataFrame(predictions)
 
-                for k, v in prediction.items():
-                    new_row[k] = v
+    # Extract real data for comparison (same range as predictions)
+    start_range = prediction_df["Date"].min()
+    end_range = prediction_df["Date"].max()
+    real_df = merged[(merged["Date"] >= start_range) & (merged["Date"] <= end_range)].copy()
 
-                new_row["Date"] = start_date + timedelta(days=1)
-
-                prediction["Date"] = start_date
-                predictions.append(prediction)
-
-                # 5. Append to rolling history
-                history_until_now = pd.concat([history_until_now, new_row], ignore_index=True)
-
-                # 6. Step forward
-                while True:
-                    start_date += timedelta(days=1)
-                    if start_date.weekday() < 5:
-                        break
+    return prediction_df, real_df
 
 
-            prediction_df = pd.DataFrame(predictions)
-            st.success("Recursive prediction complete.")
+# ==========================================================
+# API endpoints
+# ==========================================================
 
-            # ======== PLOT CHARTS =======
-            real_df = merged[(merged["Date"] >= prediction_df["Date"].min()) &
-                             (merged["Date"] <= prediction_df["Date"].max())]
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "model_loaded": bool(PREDICTORS)}
 
-            col1, col2 = st.columns(2)
 
-            with col1:
-                st.subheader("Predicted Candlestick - " + ticker_input)
-                fig_pred = go.Figure(data=[
-                    go.Candlestick(
-                        x=prediction_df["Date"],
-                        open=prediction_df["Open"],
-                        high=prediction_df["High"],
-                        low=prediction_df["Low"],
-                        close=prediction_df["Close"],
-                        increasing_line_color='green',
-                        decreasing_line_color='red',
-                        name='Predicted'
-                    )
-                ])
-                fig_pred.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-                st.plotly_chart(fig_pred, use_container_width=True)
+@app.post("/api/predict", response_model=PredictResponse)
+def api_predict(req: PredictRequest):
+    ticker = req.ticker.upper()
 
-            with col2:
-                st.subheader("Real Candlestick - " + ticker_input)
-                fig_real = go.Figure(data=[
-                    go.Candlestick(
-                        x=real_df["Date"],
-                        open=real_df["Open"],
-                        high=real_df["High"],
-                        low=real_df["Low"],
-                        close=real_df["Close"],
-                        increasing_line_color='blue',
-                        decreasing_line_color='orange',
-                        name='Real'
-                    )
-                ])
-                fig_real.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-                st.plotly_chart(fig_real, use_container_width=True)
+    if not PREDICTORS:
+        raise HTTPException(status_code=500, detail="Model not loaded on server.")
 
-            st.subheader("Real vs Predicted - " + ticker_input)
+    prediction_df, real_df = recursive_predict(
+        ticker=ticker,
+        start_date=req.start_date,
+        days=req.days,
+    )
 
-            fig = go.Figure()
+    # Normalize to Python types / strings for JSON
+    def df_to_ohlc(df: pd.DataFrame) -> List[Dict]:
+        records = []
+        for _, row in df.iterrows():
+            records.append(
+                {
+                    "date": row["Date"].isoformat()
+                    if isinstance(row["Date"], date)
+                    else str(row["Date"]),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                }
+            )
+        return records
 
-            # Real candlestick
-            fig.add_trace(go.Candlestick(
-                x=real_df["Date"],
-                open=real_df["Open"],
-                high=real_df["High"],
-                low=real_df["Low"],
-                close=real_df["Close"],
-                name="Real",
-                increasing_line_color='gray',
-                decreasing_line_color='dimgray'
-            ))
+    predictions = df_to_ohlc(prediction_df)
+    real = df_to_ohlc(real_df) if not real_df.empty else []
 
-            # Predicted typical price as line
-            prediction_df['Typical price'] = (prediction_df['High'] + prediction_df['Low'] + prediction_df['Close']) / 3
-            fig.add_trace(go.Scatter(
-                x=prediction_df["Date"],
-                y=prediction_df["Typical price"],
-                mode='lines+markers',
-                name="Predicted typical price",
-                line=dict(color='lime', width=2, dash='dash')
-            ))
-
-            fig.update_layout(template="plotly_dark", xaxis_title="Date", yaxis_title="Price")
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.write(prediction_df)
+    return PredictResponse(
+        ticker=ticker,
+        predictions=predictions,
+        real=real,
+    )
