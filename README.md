@@ -4,6 +4,9 @@
 
 AI-powered S&P 500 price forecasting that combines a Kedro feature-engineering pipeline, FastAPI inference service, and a sleek Chart.js frontend. The backend downloads company metadata and price history, engineers predictive features, and serves recursive multi-day OHLC forecasts through a single endpoint consumed by the interactive dashboard in `frontend/`.
 
+<img width="1156" height="912" alt="image" src="https://github.com/user-attachments/assets/d304138c-d22f-472a-a285-15eb9774ad7d" />
+
+
 ## Features
 - **Production-ready FastAPI backend:** Serves `/health` and `/api/predict` endpoints with CORS enabled for the bundled frontend.
 - **Kedro feature engineering:** Reuses the project's pipelines for technical indicators, lagged signals, calendar features, and corporate action context before inference.
